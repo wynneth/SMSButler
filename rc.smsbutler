@@ -1,0 +1,94 @@
+#!/bin/bash
+
+### BEGIN INIT INFO
+# Provides: SMS-Butler
+# Required-Start:
+# Required-Stop:
+# Should-Start:
+# Should-Stop:
+# Default-Start: 2 3 4 5
+# Default-Stop: 0 1 6
+# Short-Description: Start and stop SMS Butler by Wyn
+#Description: SMS Butler script, by Wyn.
+### END INIT INFO
+
+#Script to launch Wyn's SMS Butler script with system and stop it with system
+
+if [ "$BASH_VERSION" == "" ]; then
+  echo "*** This script REQUIRES bash ***" >&2
+  exit 1
+fi
+
+die() {
+	local message=$*
+	local bell=`tput bel 2>/dev/null`
+	local bold=`tput bold 2>/dev/null`
+	local red=`tput setf 4 2>/dev/null`
+	local off=`tput sgr0 2>/dev/null`
+	echo "$bell${bold}Fatal error: $red$message$off"
+	exit 1
+}
+
+get_pid() {
+       ps aux | grep 'python /usr/share/smsbutler/smsbutler.py' | grep -v grep | awk "{ print \$2 }"
+}
+notifier_is_up() {
+       [[ -n `get_pid` ]]
+}
+notifier_start() {
+       python /usr/share/wynscripts/newsms.py &
+       sleep 2
+       get_pid
+       status=$?
+       	if [ $status -eq 0 ]; then
+		if notifier_is_up; then
+			echo "SMS Butler started successfully."
+			exit
+		else 
+			echo "SMS Butler failed to start properly."
+			exit 1
+		fi
+		echo "SMS Butler started successfully."
+		exit
+	else
+		echo "Error: Command exited with non-zero status!" >&2
+		exit 1
+	fi
+}
+notifier_stop() {
+       kill `get_pid`
+}
+case "$1" in
+	'start')
+		if notifier_is_up; then
+			echo "The SMS Butler is already running with PID "`get_pid`
+			exit
+		fi
+		notifier_start
+	;;
+	'stop')
+		if ! notifier_is_up; then
+			echo "The SMS Butler is not running."
+			exit
+		fi
+		notifier_stop
+	;;
+	'restart')
+		if ! notifier_is_up; then
+			echo "The SMS Butler is not running."
+			exit
+		fi
+		notifier_stop
+		notifier_start
+	;;
+	'status')
+		if notifier_is_up; then
+			echo "The SMS Butler is currently running with PID "`get_pid`
+		else
+			echo "The SMS Butler is currently NOT running."
+		fi
+	;;
+	*)
+		echo "Usage: $0 start|stop|restart|status|dumpconfig"
+	;;
+esac
