@@ -1,33 +1,45 @@
 SMSButler
 ===============
 
-A fork of Garage SMS Butler for the Raspberry Pi, originally by AkiraFist (github)
+A fork of Garage SMS Butler for the Raspberry Pi, originally by AkiraFist and
+located here: https://github.com/AkiraFist/GarageSMSButler
 
 This project is designed to interface between SMS and various other systems.
 As I have a very varied collection of services running at home, this project
-makes it easy for members of my household to access this with no computing knowledge.
+makes it easy for members of my household to access these with no computing knowledge.
 
-The original garage door controls have been removed for the time being; until such
-time as I run wiring to utilize these functions. The same is true for the camera portion
-related to it.
+The original garage door controls have been removed for the time being.
 
-As of the writing of this readme, the project currently allows for two user levels:
-Admins and Authorized Users
+As of the writing of this readme, the project currently allows for two user levels,
+Admins and Authorized Users:
 
 Admins have full access to all commands; Authorized Users have access to a
 limited number of commands which excludes any system control commands (KILL, DISABLE, etc).
 
 Currently, this project has commands to access a Raspberry Pi running on the same network
-to check the status of a particular GPIO and change it's value. This is done utilizing the WebIOPo
+to check the status of a particular GPIO and change it's value. This is done utilizing the WebIOPi
 REST framework on the RPi. I have a relay which controls lighting connected to this GPIO,
 therefore the lighting can be queried/enabled/disabled via SMS.
 
-This project utilizes a simple curl request to check for active wireless clients
+This project utilizes a curl request to check for active wireless clients
 on the local router. This accomplishes a very simplified process of checking if a
 particular family member is home or being alerted when they arrive. (Utilizing
 our reliance on the ever present smartphone.)
 
+As this was written primarily for my own use, further configuration will rely on
+a user who has a good grasp of the methods used.
+
+The ddwrtauth file is intended to place your username (first line) and password (second line) to be used
+when accessing a router to check wireless mac addresses.
+
+Other included files run various commands, please be sure to update variables in each.
+
+If using a compatible distribution, utilize the included rc.smsbutler initscript to automatically
+launch the system at boot.
+
 GETTING STARTED:
+
+Place all files in /usr/share/smsbutler (or modify the URI in each file).
 
 You first need a Twilio account, go to www.twilio.com.
 Install necessary libraries on your device:
@@ -64,11 +76,3 @@ GRANT ALL PRIVILEGES ON * . * TO 'smsbutler'@'localhost';
 FLUSH PRIVILEGES;
 
 exit;
-
-The ddwrtauth file is intended to place your username (first line) and password (second line) to be used
-when accessing a router to check wireless mac addresses.
-
-Other included files run various commands, please be sure to update variables in each.
-
-If using a compatible distribution, utilize the included rc.smsbutler initscript to automatically
-launch the system at boot.
