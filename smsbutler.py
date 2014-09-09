@@ -135,11 +135,11 @@ def WifiClients():
 def RunStalker(mac, who, name):
   try:
     if mac in WifiClients():
-      SendSMS("{0} is already home, silly.".format(name))
+      SendSMS("{0} is already home, silly.".format(name.title()))
     else:
       while mac not in WifiClients():
         time.sleep(120)
-      SendSMS("{0} has returned home as of {1}.".format(name, time.strftime("%x %X")))
+      SendSMS("{0} has returned home as of {1}.".format(name.title(), time.strftime("%x %X")))
   except:
     log.warning('Error inside function RunStalker')
     pass
@@ -274,18 +274,18 @@ while (True):
              
             elif re.search(r'\bis\W+(?:\w+\W+){1,1}?home\b', strippedsms) is not None:
 	      matchObj = re.search(r'\bis +(.\w+)', strippedsms)
-	      sLastCommand = "{0} last checked if {2} was home on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1))
-	      log.info('{0} Now checking {2}\'s location for {1}'.format(time.strftime("%x %X"), contactname, matchObj.group(1)))
+	      sLastCommand = "{0} last checked if {2} was home on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1).title())
+	      log.info('{0} Now checking {2}\'s location for {1}'.format(time.strftime("%x %X"), contactname, matchObj.group(1).title()))
 	      if storedMacs[matchObj.group(1)] in WifiClients():
-	        SendSMS("Ok, stalker! {0} (or at least their phone) is home.".format(matchObj.group(1)))
+	        SendSMS("Ok, stalker! {0} (or at least their phone) is home.".format(matchObj.group(1).title()))
 	      else:
-	        SendSMS("Ok, stalker! {0} is not home or their phone is off.".format(matchObj.group(1)))
+	        SendSMS("Ok, stalker! {0} is not home or their phone is off.".format(matchObj.group(1).title()))
 
             elif re.search(r'\btell me when\W+(?:\w+\W+){1,1}?is home\b', strippedsms) is not None:
 	      matchObj = re.search(r'\btell me when +(.\w+)', strippedsms)
-	      sLastCommand = "{0} set stalker mode on {2} on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1))
-	      log.info('{0} Stalker mode set for {2} by {1}'.format(time.strftime("%x %X"), contactname, matchObj.group(1)))
-	      SendSMS("Stalker mode activated for {1} by {0}. I'll let you know when they return.".format(contactname, matchObj.group(1)))
+	      sLastCommand = "{0} set stalker mode on {2} on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1).title())
+	      log.info('{0} Stalker mode set for {2} by {1}'.format(time.strftime("%x %X"), contactname, matchObj.group(1).title()))
+	      SendSMS("Stalker mode activated for {1} by {0}. I'll let you know when they return.".format(contactname, matchObj.group(1).title()))
 	      try: 
 	        t = Thread(target=RunStalker, args=(storedMacs[matchObj.group(1)],sSMSSender,matchObj.group(1)))
 		t.start()
