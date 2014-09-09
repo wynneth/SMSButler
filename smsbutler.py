@@ -1,8 +1,6 @@
 #!/usr/bin/python
 
 
-# TODO: 
-#  - replace list of authorized phone numbers with a dictionary for replying by name
 # GARAGE DOOR SMS BUTLER
 # Written by Akira Fist, August 2014
 # -Modified by Bruce Goheen August 2014
@@ -25,10 +23,13 @@ import datetime
 import time
 import os
 import sys
+from threading import Thread
 from twilio.rest import TwilioRestClient
 from contextlib import closing
 import subprocess
 import re
+import urllib
+import urllib2
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                      LOGGING
@@ -49,7 +50,6 @@ twilio_auth_token = "FILLTHISIN"
 # The phone number you purchased from Twilio
 sTwilioNumber = "FILLTHISIN"
 
-iNumOpenings = 0
 iStatusEnabled = 1
 iAuthorizedUser_Count = 0
 iAdminUser_Count = 0
@@ -90,25 +90,26 @@ def SendSMS(sMsg):
     log.warning('Error inside function SendSMS')
     pass
 
-# Enable livingroom light GPIO
-def EnableLight():
+# Toggle livingroom light GPIO
+def ToggleLight(value):
   try:
-    subprocess.call(["/usr/share/smsbutler/lightrestcontrol.py", "1"])
+    url = 'http://rasppi:8000/GPIO/22/value/'
+    url = url + value
+    data = urllib.urlencode('')
+    req = urllib2.Request(url, data)
+    response = urllib2.urlopen(req)  
   except:
-    log.warning('Error inside function EnableLight')
-    pass
-
-# Disable livingroom light GPIO
-def DisableLight():
-  try:
-    subprocess.call(["/usr/share/smsbutler/lightrestcontrol.py", "0"])
-  except:
-    log.warning('Error inside function DisableLight')
+    log.warning('Error inside function ToggleLight')
     pass
 
 def LightStatus():
   try:
-    return subprocess.check_output(["/usr/share/smsbutler/lightrestcheck.py"])
+    url = 'http://rasppi:8000/GPIO/22/value'
+    response = urllib2.urlopen(url)
+    if response.read() == "1":
+      return " The light is on."
+    else:
+      return " The light is off."
   except:
     log.warning('Error inside function LightStatus')
     pass
@@ -133,7 +134,12 @@ def WifiClients():
 
 def RunStalker(mac, who, name):
   try:
-    subprocess.Popen(["python", "/usr/share/smsbutler/macstalker.py", mac, who, name])
+    if mac in WifiClients():
+      SendSMS("{0} is already home, silly.".format(name))
+    else:
+      while mac not in WifiClients():
+        time.sleep(120)
+      SendSMS("{0} has returned home as of {1}.".format(name, time.strftime("%x %X")))
   except:
     log.warning('Error inside function RunStalker')
     pass
@@ -214,7 +220,9 @@ while (True):
 	      contactname = admindict[sSMSSender]
 	      
             if strippedsms == "commands":
-	      SendSMS("No list of commands available yet.")
+	      SendSMS("Available commands are: 'commands', 'status', 'kill', 'enable', 'disable', 'uptime', ")
+	      SendSMS("'is the light on', 'turn [on/off] the light', 'is [person] home', 'tell me when [person] is home'")
+	      log.info('{0} Commands requested from {1}, replied'.format(time.strftime("%x %X"), contactname))
      
             elif ("uptime") in strippedsms:
               if iStatusEnabled == 1:
@@ -234,10 +242,10 @@ while (True):
                 # Enable livingroom light here
                 SendSMS("Ok, turning the livingroom light on.")
                 log.info('{0} SMS response sent to authorized user {1}'.format(time.strftime("%x %X"), contactname))
-                EnableLight()
+                ToggleLight("1")
               else:
                 log.info('{0} Toggle light request received from {1} but SERVICE IS DISABLED!'.format(time.strftime("%x %X"), contactname))      
-		sLastCommand = "EnableLight command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
+		sLastCommand = "Enable Light command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
 
             elif re.search(r'\bturn (off|the|light)(?:\W+\w+){0,2}?\W+(off|the|light)(?:\W+\w+){0,2}?\W+(off|the|light)\b', strippedsms) is not None:
               if iStatusEnabled == 1:
@@ -247,10 +255,10 @@ while (True):
                 # Disable livingroom light here
                 SendSMS("Ok, turning the livingroom light off.")
                 log.info('{0} SMS response sent to authorized user {1}'.format(time.strftime("%x %X"), contactname))
-                DisableLight()
+                ToggleLight("0")
               else:
                 log.info('{0} Toggle light request received from {1} but SERVICE IS DISABLED!'.format(time.strftime("%x %X"), contactname))
-		sLastCommand = "DisableLight command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
+		sLastCommand = "Disable Light command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
 
             elif ("is the light on") in strippedsms:
               if iStatusEnabled == 1:
@@ -279,7 +287,8 @@ while (True):
 	      log.info('{0} Stalker mode set for {2} by {1}'.format(time.strftime("%x %X"), contactname, matchObj.group(1)))
 	      SendSMS("Stalker mode activated for {1} by {0}. I'll let you know when they return.".format(contactname, matchObj.group(1)))
 	      try: 
-	        RunStalker(storedMacs[matchObj.group(1)],sSMSSender,matchObj.group(1))
+	        t = Thread(target=RunStalker, args=(storedMacs[matchObj.group(1)],sSMSSender,matchObj.group(1)))
+		t.start()
 	      except:
 	        SendSMS("I'm not sure who you're looking for...")
 		pass
@@ -323,6 +332,7 @@ while (True):
     exit(4)
   
   except Exception as e:
+    log.critical("Something broke the SMS Butler!")
     exc_type, exc_obj, exc_tb = sys.exc_info()
     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
     log.critical(exc_type, fname, exc_tb.tb_lineno)

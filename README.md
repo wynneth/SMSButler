@@ -32,8 +32,6 @@ a user who has a good grasp of the methods used.
 The ddwrtauth file is intended to place your username (first line) and password (second line) to be used
 when accessing a router to check wireless mac addresses.
 
-Other included files run various commands, please be sure to update variables in each.
-
 If using a compatible distribution, utilize the included rc.smsbutler initscript to automatically
 launch the system at boot.
 
