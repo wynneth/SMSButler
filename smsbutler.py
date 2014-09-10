@@ -36,8 +36,7 @@ import urllib2
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 log = logging.getLogger(__name__)
-logging.basicConfig(filename="/var/log/smsbutler",level=logging.INFO)
-formatter = logging.Formatter('%(module)s.%(funcName)s: %(message)s')
+logging.basicConfig(format='%(levelname)s:%(module)s.%(funcName)s.%(threadName)s:%(message)s', filename="/var/log/smsbutler",level=logging.INFO)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                       VARIABLES
@@ -87,7 +86,7 @@ def SendSMS(sMsg):
   try:
     sms = TwilioClient.sms.messages.create(body="{0}".format(sMsg),to="{0}".format(sSMSSender),from_="{0}".format(sTwilioNumber))
   except:
-    log.warning('Error inside function SendSMS')
+    log.exception('Error inside function SendSMS')
     pass
 
 # Toggle livingroom light GPIO
@@ -99,7 +98,7 @@ def ToggleLight(value):
     req = urllib2.Request(url, data)
     response = urllib2.urlopen(req)  
   except:
-    log.warning('Error inside function ToggleLight')
+    log.exception('Error inside function ToggleLight')
     pass
 
 def LightStatus():
@@ -111,14 +110,14 @@ def LightStatus():
     else:
       return " The light is off."
   except:
-    log.warning('Error inside function LightStatus')
+    log.exception('Error inside function LightStatus')
     pass
 
 def CheckUptime():
   try:
     return subprocess.check_output(["uptime"])
   except:
-    log.warning('Error inside function CheckUptime')
+    log.exception('Error inside function CheckUptime')
     pass
 
 def WifiClients():
@@ -129,7 +128,7 @@ def WifiClients():
       ddwrturl = "http://"+wrtuser+":"+wrtpw+"@192.168.1.1/Status_Wireless.asp"
     return subprocess.check_output(["curl", "-s", ddwrturl])
   except:
-    log.warning('Error inside function WifiClients')
+    log.exception('Error inside function WifiClients')
     pass
 
 def RunStalker(mac, who, name):
@@ -141,7 +140,7 @@ def RunStalker(mac, who, name):
         time.sleep(120)
       SendSMS("{0} has returned home as of {1}.".format(name.title(), time.strftime("%x %X")))
   except:
-    log.warning('Error inside function RunStalker')
+    log.exception('Error inside function RunStalker')
     pass
 
 try:
@@ -173,7 +172,7 @@ try:
 except Exception as e:
     exc_type, exc_obj, exc_tb = sys.exc_info()
     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-    log.warning('{0} Error while loading service, bailing!'.format(time.strftime("%x %X")))
+    log.exception('{0} Error while loading service, bailing!'.format(time.strftime("%x %X")))
     log.critical(exc_type, fname, exc_tb.tb_lineno)
     if con: con.close()
     exit(2)
@@ -207,7 +206,7 @@ while (True):
               insert_sid_cursor = insert_sid_cursor.execute("insert into Butler(sSid) values('{0}')".format(p.sid))
               con.commit()
           except:
-            log.warning('Error while inserting SID record to database')
+            log.exception('Error while inserting SID record to database')
             pass
           # strip punctuation from the message
           strippedsms = re.sub("[^A-Za-z0-9 ]", "", p.body.lower())
@@ -332,7 +331,7 @@ while (True):
     exit(4)
   
   except Exception as e:
-    log.critical("Something broke the SMS Butler!")
+    log.critical("Something broke the SMS Butler!", exc_info=True)
     exc_type, exc_obj, exc_tb = sys.exc_info()
     fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
     log.critical(exc_type, fname, exc_tb.tb_lineno)
