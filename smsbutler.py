@@ -36,7 +36,7 @@ import urllib2
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 log = logging.getLogger(__name__)
-logging.basicConfig(format='%(levelname)s:%(module)s.%(funcName)s.%(threadName)s:%(message)s', filename="/var/log/smsbutler",level=logging.INFO)
+logging.basicConfig(format='%(asctime)s:%(levelname)s:%(module)s.%(funcName)s.%(threadName)s:%(message)s', filename="/var/log/smsbutler",level=logging.INFO)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                       VARIABLES
@@ -77,14 +77,36 @@ storedMacs = {
 "johnny fever": "FF:00:FF:00:FF:00"
 }
 
+# Usage dictionary
+usagedict = {
+"commands": "lists available commands",
+"status": "provides status of SMS Butler",
+"usage": "is the command you just issued...",
+"kill": "will hardstop SMS Butler",
+"enable": "will enable responses",
+"disable": "will disable responses",
+"uptime": "provides system uptime",
+"is the light on": "provides status of living room light",
+"turn [on/off] the light": "should be self-explanatory",
+"is [person] home": "should be self-explanatory",
+"tell me when [person] is home": "should be self-explanatory"
+}
+
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                       FUNCTIONS
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 # This function sends an SMS message, wrapped in some error handling
-def SendSMS(sMsg):
+def ReplySMS(sMsg):
   try:
     sms = TwilioClient.sms.messages.create(body="{0}".format(sMsg),to="{0}".format(sSMSSender),from_="{0}".format(sTwilioNumber))
+  except:
+    log.exception('Error inside function ReplySMS')
+    pass
+
+def SendSMS(sMsg, sRecip):
+  try:
+    sms = TwilioClient.sms.messages.create(body="{0}".format(sMsg),to="{0}".format(sRecip),from_="{0}".format(sTwilioNumber))
   except:
     log.exception('Error inside function SendSMS')
     pass
@@ -134,11 +156,11 @@ def WifiClients():
 def RunStalker(mac, who, name):
   try:
     if mac in WifiClients():
-      SendSMS("{0} is already home, silly.".format(name.title()))
+      ReplySMS("{0} is already home, silly.".format(name.title()))
     else:
       while mac not in WifiClients():
         time.sleep(120)
-      SendSMS("{0} has returned home as of {1}.".format(name.title(), time.strftime("%x %X")))
+      ReplySMS("{0} has returned home as of {1}.".format(name.title(), time.strftime("%x %X")))
   except:
     log.exception('Error inside function RunStalker')
     pass
@@ -168,12 +190,13 @@ try:
         iSID_Count = iSID_Count + 1
         lstSids.append(sid_col)
         
-  log.info('{0} Service loaded, found {1} admin users, {2} authorized users, {3} previous SMS messages'.format(time.strftime("%x %X"),iAdminUser_Count,iAuthorizedUser_Count,iSID_Count))
-except Exception as e:
-    exc_type, exc_obj, exc_tb = sys.exc_info()
-    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-    log.exception('{0} Error while loading service, bailing!'.format(time.strftime("%x %X")))
-    log.critical(exc_type, fname, exc_tb.tb_lineno)
+  log.info('Service loaded, found {1} admin users, {1} authorized users, {2} previous SMS messages'.format(iAdminUser_Count,iAuthorizedUser_Count,iSID_Count))
+#except Exception as e:
+except:
+#    exc_type, exc_obj, exc_tb = sys.exc_info()
+#    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+    log.exception('Error while loading service, bailing!')
+#    log.critical(exc_type, fname, exc_tb.tb_lineno)
     if con: con.close()
     exit(2)
 
@@ -210,6 +233,11 @@ while (True):
             pass
           # strip punctuation from the message
           strippedsms = re.sub("[^A-Za-z0-9 ]", "", p.body.lower())
+	  # reply to STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, START, YES, HELP, and INFO - twilio automatically acts on these and we can't override
+	  twilOverrides = [ "stop", "stopall", "unsubscribe", "cancel", "end", "quit", "start", "yes", "help", "info" ]
+	  if strippedsms in twilOverrides:
+	    log.info("Received keyword overriden by Twilio: {0} from {1}".format(strippedsms,sSMSSender))
+	    ReplySMS("We apologize if this is an incorrect number. If you unintentionally selected to STOP msgs, reply START to receive them again.")
           # check first to see if user is in admin group then fallback to authorized only
           if sSMSSender in authdict or admindict:
 	    
@@ -219,44 +247,48 @@ while (True):
 	      contactname = admindict[sSMSSender]
 	      
             if strippedsms == "commands":
-	      SendSMS("Available commands are: 'commands', 'status', 'kill', 'enable', 'disable', 'uptime', ")
-	      SendSMS("'is the light on', 'turn [on/off] the light', 'is [person] home', 'tell me when [person] is home'")
-	      log.info('{0} Commands requested from {1}, replied'.format(time.strftime("%x %X"), contactname))
+	      ReplySMS("Available commands are: 'commands', 'status', 'kill', 'enable', 'disable', 'uptime', ")
+	      ReplySMS("'is the light on', 'turn [on/off] the light', 'is [person] home', 'tell me when [person] is home'")
+	      log.debug('Commands requested from {0}, replied'.format(contactname))
      
+            #inserting elif for Usage command here with regex...
+	    elif re.search(r'\busage (\w+)+', strippedsms):
+	      matchObj = re.search(r'\busage (\w+)+', strippedsms)
+	      # use a dictionary for the usage definitions
+	      if matchObj.group(1):
+	        if matchObj.group(1) in usagedict:
+	          ReplySMS("{0}, {1} {2}".format(contactname,matchObj.group(1),usagedict[matchObj.group(1)]))
+                else:
+		  ReplySMS("{0}, I don't know that command.".format(contactname))
+	      else:
+	        ReplySMS("{0}, please provide a command name with the Usage command.".format(contactname))
+	        
             elif ("uptime") in strippedsms:
               if iStatusEnabled == 1:
-                log.info('{0} Uptime requested from {1}, replied'.format(time.strftime("%x %X"), contactname))
-                SendSMS("{0}, the current system uptime is {1}".format(contactname, CheckUptime()))
+                log.info('Uptime requested from {0}, replied'.format(contactname))
+                ReplySMS("{0}, the current system uptime is {1}".format(contactname, CheckUptime()))
 		sLastCommand = "Uptime command issued by {0} on {1}".format(contactname, time.strftime("%x %X"))
               else:
-                log.info('{0} SERVICE DISABLED!  Uptime requested from {1}, replied'.format(time.strftime("%x %X"), contactname))
-                SendSMS("SERVICE DISABLED!  Uptime request cannot be processed: {0}".format(sLastCommand))
+                log.info('SERVICE DISABLED! Uptime requested from {0}, replied'.format(contactname))
+                ReplySMS("SERVICE DISABLED! Uptime request cannot be processed: {0}".format(sLastCommand))
 		sLastCommand = "Uptime command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
 
-	    elif re.search(r'\bturn (on|the|light)(?:\W+\w+){0,2}?\W+(on|the|light)(?:\W+\w+){0,2}?\W+(on|the|light)\b', strippedsms) is not None:
+            elif re.search(r'\bturn (on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)\b', strippedsms) is not None:
+	      matchObj = re.search(r'\bturn (on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)\b', strippedsms)
               if iStatusEnabled == 1:
                 sLastCommand = "Living room light last toggled by {0} on {1}".format(contactname, time.strftime("%x %X"))
-                log.info('{0} Now enabling light for {1}'.format(time.strftime("%x %X"), contactname))
-
-                # Enable livingroom light here
-                SendSMS("Ok, turning the livingroom light on.")
-                log.info('{0} SMS response sent to authorized user {1}'.format(time.strftime("%x %X"), contactname))
-                ToggleLight("1")
+		if "on" in matchObj.group():
+		  lighttoggle = "on"
+                  ToggleLight("1")
+                else:
+		  lighttoggle = "off"
+	          ToggleLight("0")
+                # Toggle livingroom light here
+                ReplySMS("Ok, turning the livingroom light {0}.".format(lighttoggle))
+		log.info('Now turning living room light {0} for {1}'.format(lighttoggle,contactname))
+                log.debug('SMS response sent to authorized user {0}'.format(contactname))
               else:
-                log.info('{0} Toggle light request received from {1} but SERVICE IS DISABLED!'.format(time.strftime("%x %X"), contactname))      
-		sLastCommand = "Enable Light command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
-
-            elif re.search(r'\bturn (off|the|light)(?:\W+\w+){0,2}?\W+(off|the|light)(?:\W+\w+){0,2}?\W+(off|the|light)\b', strippedsms) is not None:
-              if iStatusEnabled == 1:
-                sLastCommand = "Living room light last toggled by {0} on {1}".format(contactname, time.strftime("%x %X"))
-                log.info('{0} Now disabling light for {1}'.format(time.strftime("%x %X"), contactname))
-
-                # Disable livingroom light here
-                SendSMS("Ok, turning the livingroom light off.")
-                log.info('{0} SMS response sent to authorized user {1}'.format(time.strftime("%x %X"), contactname))
-                ToggleLight("0")
-              else:
-                log.info('{0} Toggle light request received from {1} but SERVICE IS DISABLED!'.format(time.strftime("%x %X"), contactname))
+                log.info('Toggle light request received from {0} but SERVICE IS DISABLED!'.format(contactname))
 		sLastCommand = "Disable Light command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
 
             elif ("is the light on") in strippedsms:
@@ -265,75 +297,91 @@ while (True):
                 log.info('{0} Now checking light status for {1}'.format(time.strftime("%x %X"), contactname))
 
                 # Check livingroom light status here
-                SendSMS("The living room light? {0}".format(LightStatus()))
-                log.info('{0} SMS response sent to authorized user {1}'.format(time.strftime("%x %X"), contactname))
+                ReplySMS("The living room light? {0}".format(LightStatus()))
+                log.debug('SMS response sent to authorized user {0}'.format(contactname))
               else:
-                log.info('{0} Light status request received from {1} but SERVICE IS DISABLED!'.format(time.strftime("%x %X"), contactname))
+                log.info('Light status request received from {0} but SERVICE IS DISABLED!'.format(contactname))
                 sLastCommand = "LightStatus command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
+		
+	    elif ("deploy countermeasures") in strippedsms:
+	      ReplySMS("{0}, countermeasures have been deployed. Stage 1 action recommended.".format(contactname))
              
             elif re.search(r'\bis\W+(?:\w+\W+){1,1}?home\b', strippedsms) is not None:
 	      matchObj = re.search(r'\bis +(.\w+)', strippedsms)
 	      sLastCommand = "{0} last checked if {2} was home on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1).title())
-	      log.info('{0} Now checking {2}\'s location for {1}'.format(time.strftime("%x %X"), contactname, matchObj.group(1).title()))
+	      log.info('Now checking {1}\'s location for {0}'.format(contactname, matchObj.group(1).title()))
 	      if storedMacs[matchObj.group(1)] in WifiClients():
-	        SendSMS("Ok, stalker! {0} (or at least their phone) is home.".format(matchObj.group(1).title()))
+	        ReplySMS("Ok, stalker! {0} (or at least their phone) is home.".format(matchObj.group(1).title()))
 	      else:
-	        SendSMS("Ok, stalker! {0} is not home or their phone is off.".format(matchObj.group(1).title()))
+	        ReplySMS("Ok, stalker! {0} is not home or their phone is off.".format(matchObj.group(1).title()))
 
             elif re.search(r'\btell me when\W+(?:\w+\W+){1,1}?is home\b', strippedsms) is not None:
 	      matchObj = re.search(r'\btell me when +(.\w+)', strippedsms)
 	      sLastCommand = "{0} set stalker mode on {2} on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1).title())
-	      log.info('{0} Stalker mode set for {2} by {1}'.format(time.strftime("%x %X"), contactname, matchObj.group(1).title()))
-	      SendSMS("Stalker mode activated for {1} by {0}. I'll let you know when they return.".format(contactname, matchObj.group(1).title()))
+	      log.info('Stalker mode set for {1} by {0}'.format(contactname, matchObj.group(1).title()))
+	      ReplySMS("Stalker mode activated for {1} by {0}. I'll let you know when they return.".format(contactname, matchObj.group(1).title()))
 	      try: 
 	        t = Thread(target=RunStalker, args=(storedMacs[matchObj.group(1)],sSMSSender,matchObj.group(1)))
 		t.start()
 	      except:
-	        SendSMS("I'm not sure who you're looking for...")
+	        ReplySMS("I'm not sure who you're looking for...")
 		pass
 	    
             if sSMSSender in admindict:
 	      contactname = admindict[sSMSSender]
               if strippedsms == "kill":
-                log.info('{0} Received KILL command from {1} - bailing now!'.format(time.strftime("%x %X"), contactname))
-                SendSMS("KILL command received, {0}.  Bailing to terminal now!".format(contactname))
+                log.info('Received KILL command from {0} - bailing now!'.format(contactname))
+                ReplySMS("KILL command received, {0}.  Bailing to terminal now!".format(contactname))
 	        sLastCommand = "Kill command issued by {0} on {1}".format(contactname, time.strftime("%x %X"))
                 exit(3)
 	    
               elif strippedsms == "disable":
                 iStatusEnabled = 0
-                log.info('{0} Received DISABLE command from {1}, now disabled.  Service is now disabled.'.format(time.strftime("%x %X"), contactname))
-                SendSMS("{0}, service is being disabled.  Send ENABLE to restart.".format(contactname))
+                log.info('Received DISABLE command from {0}, now disabled.  Service is now disabled.'.format(contactname))
+                ReplySMS("{0}, service is being disabled.  Send ENABLE to restart.".format(contactname))
 	        sLastCommand = "DISABLE command issued by {0} on {1}".format(contactname, time.strftime("%x %X"))
 
               elif strippedsms == "enable":
                 iStatusEnabled = 1
-                log.info('{0} Received ENABLE command from {1}.  Service is now enabled'.format(time.strftime("%x %X"), contactname))
-                SendSMS("{0}, service is now enabled".format(contactname))
+                log.info('Received ENABLE command from {0}.  Service is now enabled'.format(contactname))
+                ReplySMS("{0}, service is now enabled".format(contactname))
 	        sLastCommand = "ENABLE command issued by {0} on {1}".format(contactname, time.strftime("%x %X"))
 
               elif strippedsms == "status":
                 if iStatusEnabled == 1:
-                  log.info('{0} Status requested from {1}, replied'.format(time.strftime("%x %X"), contactname))
-                  SendSMS("{0}, status is ENABLED: {1}".format(contactname,sLastCommand))
+                  log.info('Status requested from {0}, replied'.format(contactname))
+                  ReplySMS("{0}, status is ENABLED: {1}".format(contactname,sLastCommand))
                 else:
-                  log.info('{0} SERVICE DISABLED!  Status requested from {1}, replied'.format(time.strftime("%x %X"), contactname))
-                  SendSMS("{0}, status is SERVICE DISABLED: {1}".format(contactname,sLastCommand))
+                  log.info('SERVICE DISABLED!  Status requested from {0}, replied'.format(contactname))
+                  ReplySMS("{0}, status is SERVICE DISABLED: {1}".format(contactname,sLastCommand))
+
+              elif re.search(r'send a text to ', strippedsms) is not None:
+	        matchObj = re.search(r'\bsend a text to ?(\w+)? ?(\d{10}) ?(.*)', strippedsms)
+ 		if iStatusEnabled == 1:
+                  log.info('Received TEXT command from {0}.'.format(contactname))
+                  if matchObj.group(1):
+		    SendSMS(matchObj.group(3), matchObj.group(2))
+		    ReplySMS("{0}, I am sending your message to {1} at {2}.".format(contactname,matchObj.group(1),matchObj.group(2)))
+		  else:
+		    SendSMS(matchObj.group(2),matchObj.group(3))
+	            ReplySMS("{0}, I am sending your message to {1}.".format(contactname,matchObj.group(2)))
+		  sLastCommand = "TEXT command issued by {0} on {1}".format(contactname, time.strftime("%x %X"))
 
             else:
-              SendSMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
+              ReplySMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
     
           else: # This phone number is not authorized.  Report possible intrusion to home owner
-            log.critical('{0} Unauthorized user tried to access system: {1}'.format(time.strftime("%x %X"), sSMSSender))
+            log.critical('Unauthorized user tried to access system: {0}'.format(sSMSSender))
 	    sLastCommand = "Unauthorized attempt by {0} on {1}".format(p.from_, time.strftime("%x %X"))
 
   except KeyboardInterrupt:  
+    if con: con.close()
     exit(4)
   
   except Exception as e:
     log.critical("Something broke the SMS Butler!", exc_info=True)
-    exc_type, exc_obj, exc_tb = sys.exc_info()
-    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-    log.critical(exc_type, fname, exc_tb.tb_lineno)
+#    exc_type, exc_obj, exc_tb = sys.exc_info()
+#    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+#    log.critical(exc_type, fname, exc_tb.tb_lineno)
     if con: con.close()
     exit(1)
