@@ -102,14 +102,12 @@ def ReplySMS(sMsg):
     sms = TwilioClient.sms.messages.create(body="{0}".format(sMsg),to="{0}".format(sSMSSender),from_="{0}".format(sTwilioNumber))
   except:
     log.exception('Error inside function ReplySMS')
-    pass
 
 def SendSMS(sMsg, sRecip):
   try:
     sms = TwilioClient.sms.messages.create(body="{0}".format(sMsg),to="{0}".format(sRecip),from_="{0}".format(sTwilioNumber))
   except:
     log.exception('Error inside function SendSMS')
-    pass
 
 # Toggle livingroom light GPIO
 def ToggleLight(value):
@@ -121,7 +119,6 @@ def ToggleLight(value):
     response = urllib2.urlopen(req)  
   except:
     log.exception('Error inside function ToggleLight')
-    pass
 
 def LightStatus():
   try:
@@ -133,14 +130,12 @@ def LightStatus():
       return " The light is off."
   except:
     log.exception('Error inside function LightStatus')
-    pass
 
 def CheckUptime():
   try:
     return subprocess.check_output(["uptime"])
   except:
     log.exception('Error inside function CheckUptime')
-    pass
 
 def WifiClients():
   try:
@@ -151,7 +146,6 @@ def WifiClients():
     return subprocess.check_output(["curl", "-s", ddwrturl])
   except:
     log.exception('Error inside function WifiClients')
-    pass
 
 def RunStalker(mac, who, name):
   try:
@@ -163,7 +157,6 @@ def RunStalker(mac, who, name):
       ReplySMS("{0} has returned home as of {1}.".format(name.title(), time.strftime("%x %X")))
   except:
     log.exception('Error inside function RunStalker')
-    pass
 
 try:
   # Store admin and authorized phone numbers in a dictionary, so we don't waste SQL resources repeatedly querying tables
@@ -230,7 +223,6 @@ while (True):
               con.commit()
           except:
             log.exception('Error while inserting SID record to database')
-            pass
           # strip punctuation from the message
           strippedsms = re.sub("[^A-Za-z0-9 ]", "", p.body.lower())
 	  # reply to STOP, STOPALL, UNSUBSCRIBE, CANCEL, END, QUIT, START, YES, HELP, and INFO - twilio automatically acts on these and we can't override
@@ -325,7 +317,6 @@ while (True):
 		t.start()
 	      except:
 	        ReplySMS("I'm not sure who you're looking for...")
-		pass
 	    
             if sSMSSender in admindict:
 	      contactname = admindict[sSMSSender]
