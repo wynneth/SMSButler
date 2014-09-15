@@ -54,13 +54,11 @@ create database SMSButler;
 
 use SMSButler;
 
-create table Butler(sSid CHAR(40));
+create table Butler(sSid CHAR(40), dDate INT);
 
 create table Authorized(sPhone CHAR(20), sName CHAR(20));
 
 create table Admins(sPhone CHAR(20), sName CHAR(20));
-
-create table Log(sPhone CHAR(20), sAction CHAR(10), dDate datetime);
 
 -- put your phone number, with a +1 before it if you're inside the USA
 

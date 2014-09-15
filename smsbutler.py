@@ -17,8 +17,8 @@
 #    
 import logging
 import logging.handlers
-import MySQLdb as mdb
-import MySQLdb.cursors
+import MySQLdb as mdb #for MySQL to store/retrieve SIDs and contacts
+import MySQLdb.cursors #for creating a dictionary of contacts
 import datetime
 import time
 import os
@@ -26,10 +26,11 @@ import sys
 from threading import Thread
 from twilio.rest import TwilioRestClient
 from contextlib import closing
-import subprocess
-import re
-import urllib
-import urllib2
+import subprocess #for shell scripts and commands
+import re #regex used throughout
+import urllib #for raspberry pi webiopi rest access
+import urllib2 #for raspberry pi webiopi rest access
+import socket #for tivo integration
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                      LOGGING
@@ -57,7 +58,6 @@ iSID_Count = 0
 sLastCommand = "Startup sequence initiated at {0}.  No requests, yet".format(time.strftime("%x %X"))
 sSid = ""
 sSMSSender = ""
-
 
 # Unfortunately, you can't delete SMS messages from Twilio's list.  
 # So we store previously processed SIDs into the database.
@@ -184,14 +184,76 @@ try:
         lstSids.append(sid_col)
         
   log.info('Service loaded, found {1} admin users, {1} authorized users, {2} previous SMS messages'.format(iAdminUser_Count,iAuthorizedUser_Count,iSID_Count))
-#except Exception as e:
 except:
-#    exc_type, exc_obj, exc_tb = sys.exc_info()
-#    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
     log.exception('Error while loading service, bailing!')
-#    log.critical(exc_type, fname, exc_tb.tb_lineno)
     if con: con.close()
     exit(2)
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#                     TiVo Functions
+#
+#
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+thingstosend = {"channelup": "IRCODE CHANNELUP", "channeldown": "IRCODE CHANNELDOWN", "pause": "IRCODE PAUSE", "play": "IRCODE PLAY"}
+tivoip = { "livingroom": "FILLTHISIN", "bedroom": "FILLTHISIN" }
+telnetoutput = ""
+response = ""
+
+def telnetSend(tivoaddr,tivocommand):   #connect to tivo, issue command, disconnect
+  try:
+    tivosock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #setup the socket
+    tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tivosock.connect((tivoaddr, 31339)) #open the socket
+    response = tivosock.recv(1096)
+    tivosock.sendall(tivocommand+"\r\n") #send the command
+    response = tivosock.recv(1096)
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()   #close the socket connection
+    matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
+    tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    return tivoreply
+  except:
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()
+    log.exception("Error in telnetSend function")
+
+def telnetGet(tivoaddr,tivocommand):   #connect to tivo, get data, disconnect
+  try:
+    tivosock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #setup the socket
+    tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tivosock.connect((tivoaddr, 31339)) #open the socket
+    log.info("telnetGet beginning")
+    while True: #scan the connection for data
+      response = tivosock.recv(4096)
+      p = "CH_STATUS"
+      if re.search(r'\bCH_STATUS (\d+) (\w+)', response): #search the data for p
+        break
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()   #close the socket connection
+    matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
+    tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    log.info("telnetGet ran")
+    return tivoreply
+  except:
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()
+    log.exception("Error in telnetGet function")
+
+def tivoFunction(tivoaddr,command,options=""):  #connect to tivo and perform command
+  tivocommand = command+options
+  if re.search(r'\b(\w+\W*) (\d+)', tivocommand):
+    if "view" in tivocommand:
+      commandtosend = "SETCH "+options
+      return telnetSend(tivoaddr,commandtosend)
+  elif tivocommand in thingstosend:
+    return telnetSend(tivoaddr,thingstosend[tivocommand])
+  elif tivocommand == "current channel":
+    log.info("Tivo current channel elif running")
+    return "Current channel is {0}".format(telnetGet(tivoaddr,tivocommand))
+  else:
+    return "Unrecognized command {0}".format(tivocommand)
+    log.info("User attempted to send unrecognized TiVo command: {0}".format(tivocommand))
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                       MAIN LOOP
@@ -219,8 +281,19 @@ while (True):
           lstSids.append(p.sid)
           try:
             with closing(con.cursor()) as insert_sid_cursor:
+	      fixeddate = datetime.datetime.strptime(p.date_sent.split("+")[0], '%a, %d %b %Y %H:%M:%S ')
+              insert_sid_cursor = insert_sid_cursor.execute("insert into Butler(sSid,dDate) values('{0}',UNIX_TIMESTAMP('{1}'))".format(p.sid,fixeddate))
+              con.commit()
+            with closing(con.cursor()) as delete_sid_cursor:
+	      delete_sid_cursor = delete_sid_cursor.execute("delete from Butler where FROM_UNIXTIME(dDate) < {:%Y-%m-%d}".format(datetime.datetime.utcnow() - datetime.timedelta(days=1)))
+	      log.info("Attempting to delete old records")
+	      con.commit()
+	  except (AttributeError, MySQLdb.OperationalError):
+	    con = mdb.connect(host="localhost", user="alfred", passwd="alfredpassword", db="SnarfButler")
+	    with closing(con.cursor()) as insert_sid_cursor:
               insert_sid_cursor = insert_sid_cursor.execute("insert into Butler(sSid) values('{0}')".format(p.sid))
               con.commit()
+	      log.warn('Error while inserting SID record, reset con / cursor')
           except:
             log.exception('Error while inserting SID record to database')
           # strip punctuation from the message
@@ -265,7 +338,7 @@ while (True):
                 ReplySMS("SERVICE DISABLED! Uptime request cannot be processed: {0}".format(sLastCommand))
 		sLastCommand = "Uptime command issued by {0} on {1}, but not processed.".format(contactname, time.strftime("%x %X"))
 
-            elif re.search(r'\bturn (on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)\b', strippedsms) is not None:
+            elif re.search(r'\bturn (on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)\b', strippedsms):
 	      matchObj = re.search(r'\bturn (on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)(?:\W+\w+){0,2}?\W+(on|off|the|light)\b', strippedsms)
               if iStatusEnabled == 1:
                 sLastCommand = "Living room light last toggled by {0} on {1}".format(contactname, time.strftime("%x %X"))
@@ -298,7 +371,7 @@ while (True):
 	    elif ("deploy countermeasures") in strippedsms:
 	      ReplySMS("{0}, countermeasures have been deployed. Stage 1 action recommended.".format(contactname))
              
-            elif re.search(r'\bis\W+(?:\w+\W+){1,1}?home\b', strippedsms) is not None:
+            elif re.search(r'\bis\W+(?:\w+\W+){1,1}?home\b', strippedsms):
 	      matchObj = re.search(r'\bis +(.\w+)', strippedsms)
 	      sLastCommand = "{0} last checked if {2} was home on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1).title())
 	      log.info('Now checking {1}\'s location for {0}'.format(contactname, matchObj.group(1).title()))
@@ -307,7 +380,7 @@ while (True):
 	      else:
 	        ReplySMS("Ok, stalker! {0} is not home or their phone is off.".format(matchObj.group(1).title()))
 
-            elif re.search(r'\btell me when\W+(?:\w+\W+){1,1}?is home\b', strippedsms) is not None:
+            elif re.search(r'\btell me when\W+(?:\w+\W+){1,1}?is home\b', strippedsms):
 	      matchObj = re.search(r'\btell me when +(.\w+)', strippedsms)
 	      sLastCommand = "{0} set stalker mode on {2} on {1}".format(contactname, time.strftime("%x %X"), matchObj.group(1).title())
 	      log.info('Stalker mode set for {1} by {0}'.format(contactname, matchObj.group(1).title()))
@@ -317,6 +390,13 @@ while (True):
 		t.start()
 	      except:
 	        ReplySMS("I'm not sure who you're looking for...")
+		
+            elif re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*) ?(\w*\d*)', strippedsms):
+              matchObj = re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)(\s\w*\d*)', strippedsms)
+              if matchObj.group(3):
+                ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2),matchObj.group(3))))
+              else:
+                ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2))))
 	    
             if sSMSSender in admindict:
 	      contactname = admindict[sSMSSender]
@@ -346,7 +426,7 @@ while (True):
                   log.info('SERVICE DISABLED!  Status requested from {0}, replied'.format(contactname))
                   ReplySMS("{0}, status is SERVICE DISABLED: {1}".format(contactname,sLastCommand))
 
-              elif re.search(r'send a text to ', strippedsms) is not None:
+              elif re.search(r'send a text to ', strippedsms):
 	        matchObj = re.search(r'\bsend a text to ?(\w+)? ?(\d{10}) ?(.*)', strippedsms)
  		if iStatusEnabled == 1:
                   log.info('Received TEXT command from {0}.'.format(contactname))
@@ -358,8 +438,8 @@ while (True):
 	            ReplySMS("{0}, I am sending your message to {1}.".format(contactname,matchObj.group(2)))
 		  sLastCommand = "TEXT command issued by {0} on {1}".format(contactname, time.strftime("%x %X"))
 
-            else:
-              ReplySMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
+              else:
+                ReplySMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
     
           else: # This phone number is not authorized.  Report possible intrusion to home owner
             log.critical('Unauthorized user tried to access system: {0}'.format(sSMSSender))
@@ -371,8 +451,5 @@ while (True):
   
   except Exception as e:
     log.critical("Something broke the SMS Butler!", exc_info=True)
-#    exc_type, exc_obj, exc_tb = sys.exc_info()
-#    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
-#    log.critical(exc_type, fname, exc_tb.tb_lineno)
     if con: con.close()
     exit(1)
