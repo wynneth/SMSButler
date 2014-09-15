@@ -62,8 +62,9 @@ create table Admins(sPhone CHAR(20), sName CHAR(20));
 
 -- put your phone number, with a +1 before it if you're inside the USA
 
-insert into Authorized (sPhone, sName) values ('+19998675309', 'Jenny');   #Repeat as needed for authorized phone numbers
-insert into Admins (sPhone, sName) valus ('+19995555555', 'Johnny Fever');
+insert into Authorized (sPhone, sName) values ('+19998675309', 'Jenny');   #Repeat as needed for auth phone numbers
+
+insert into Admins (sPhone, sName) valus ('+19995555555', 'Johnny Fever'); #Repeat as needed for admin phone numbers
 
 CREATE USER 'smsbutler'@'localhost' IDENTIFIED BY 'smsbutlerpassword';
 
