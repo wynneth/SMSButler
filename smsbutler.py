@@ -398,7 +398,11 @@ while (True):
               else:
                 ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2))))
 	    
-            if sSMSSender in admindict:
+	    elif sSMSSender not in admindict:
+	      ReplySMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
+	    
+	    
+            elif sSMSSender in admindict:
 	      contactname = admindict[sSMSSender]
               if strippedsms == "kill":
                 log.info('Received KILL command from {0} - bailing now!'.format(contactname))
