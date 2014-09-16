@@ -206,24 +206,29 @@ def telnetSend(tivoaddr,tivocommand):   #connect to tivo, issue command, disconn
     tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     tivosock.connect((tivoaddr, 31339)) #open the socket
     response = tivosock.recv(1096)
+    log.debug("Tivo initial response: {0}".format(response))
     tivosock.sendall(tivocommand+"\r\n") #send the command
     response = tivosock.recv(1096)
+    log.debug("Tivo post-send response: {0}".format(response))
     tivosock.shutdown(socket.SHUT_RDWR)
     tivosock.close()   #close the socket connection
-    matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
-    tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    if re.search(r'\bCH_STATUS (\d+) (\w+)', response):
+      matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
+      tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    else:
+      tivoreply = "..."
     return tivoreply
   except:
+    log.exception("Error in telnetSend function")
     tivosock.shutdown(socket.SHUT_RDWR)
     tivosock.close()
-    log.exception("Error in telnetSend function")
 
 def telnetGet(tivoaddr,tivocommand):   #connect to tivo, get data, disconnect
   try:
     tivosock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #setup the socket
     tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     tivosock.connect((tivoaddr, 31339)) #open the socket
-    log.info("telnetGet beginning")
+    log.debug("telnetGet beginning")
     while True: #scan the connection for data
       response = tivosock.recv(4096)
       p = "CH_STATUS"
@@ -233,12 +238,12 @@ def telnetGet(tivoaddr,tivocommand):   #connect to tivo, get data, disconnect
     tivosock.close()   #close the socket connection
     matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
     tivoreply = matchObj.group(1)+" "+matchObj.group(2)
-    log.info("telnetGet ran")
+    log.debug("telnetGet ran")
     return tivoreply
   except:
+    log.exception("Error in telnetGet function")
     tivosock.shutdown(socket.SHUT_RDWR)
     tivosock.close()
-    log.exception("Error in telnetGet function")
 
 def tivoFunction(tivoaddr,command,options=""):  #connect to tivo and perform command
   tivocommand = command+options
@@ -391,8 +396,8 @@ while (True):
 	      except:
 	        ReplySMS("I'm not sure who you're looking for...")
 		
-            elif re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*) ?(\w*\d*)', strippedsms):
-              matchObj = re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)(\s\w*\d*)', strippedsms)
+            elif re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)(\s.*)?$', strippedsms):
+              matchObj = re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)\s*(\w*\d*)$', strippedsms)
               if matchObj.group(3):
                 ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2),matchObj.group(3))))
               else:
