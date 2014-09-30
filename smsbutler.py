@@ -459,6 +459,10 @@ while (True):
     if con: con.close()
     exit(4)
   
+  except httplib.ResponseNotReady:
+    log.warn("httplib threw a ResponseNotReady, previous command may have failed") #log httplib exception
+    messages = TwilioClient.messages.list(date_sent=datetime.datetime.utcnow()) #retry retrieving message list
+  
   except Exception as e:
     log.critical("Something broke the SMS Butler!", exc_info=True)
     if con: con.close()
