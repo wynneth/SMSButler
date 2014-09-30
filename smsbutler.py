@@ -87,9 +87,10 @@ usagedict = {
 "disable": "will disable responses",
 "uptime": "provides system uptime",
 "is the light on": "provides status of living room light",
-"turn [on/off] the light": "should be self-explanatory",
-"is [person] home": "should be self-explanatory",
-"tell me when [person] is home": "should be self-explanatory"
+"turn on the light": "should be self-explanatory",
+"turn off the light": "should be self-explanatory",
+"is person home": "should be self-explanatory",
+"tell me when person is home": "should be self-explanatory"
 }
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
