@@ -31,6 +31,7 @@ import re #regex used throughout
 import urllib #for raspberry pi webiopi rest access
 import urllib2 #for raspberry pi webiopi rest access
 import socket #for tivo integration
+from httplib import ResponseNotReady #attempt to handle this exception case
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                      LOGGING
@@ -318,10 +319,18 @@ while (True):
 	      contactname = admindict[sSMSSender]
 	      
             if strippedsms == "commands":
-	      ReplySMS("Available commands are: 'commands', 'status', 'kill', 'enable', 'disable', 'uptime', ")
-	      ReplySMS("'is the light on', 'turn [on/off] the light', 'is [person] home', 'tell me when [person] is home'")
+	      ReplySMS("Available commands are:")
+              cmdlist = [key for key in usagedict]
+              iterations = (len(cmdlist)/6)+1
+              start = 0
+              count = 0
+              while iterations >= count:
+                count = count + 1
+                if start < len(cmdlist):
+                  ReplySMS(str(cmdlist[start:(start+6)]).replace("[","").replace("]",""))
+                  start = start+6
 	      log.debug('Commands requested from {0}, replied'.format(contactname))
-     
+
             #inserting elif for Usage command here with regex...
 	    elif re.search(r'\busage (\w+)+', strippedsms):
 	      matchObj = re.search(r'\busage (\w+)+', strippedsms)
@@ -459,7 +468,7 @@ while (True):
     if con: con.close()
     exit(4)
   
-  except httplib.ResponseNotReady:
+  except ResponseNotReady:
     log.warn("httplib threw a ResponseNotReady, previous command may have failed") #log httplib exception
     messages = TwilioClient.messages.list(date_sent=datetime.datetime.utcnow()) #retry retrieving message list
   
