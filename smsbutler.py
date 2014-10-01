@@ -30,6 +30,7 @@ import subprocess #for shell scripts and commands
 import re #regex used throughout
 import urllib #for raspberry pi webiopi rest access
 import urllib2 #for raspberry pi webiopi rest access
+import socket #for tivo integration
 from httplib import ResponseNotReady #attempt to handle exception cases
 from httplib2 import ServerNotFoundError
 
@@ -46,10 +47,10 @@ logging.basicConfig(format='%(asctime)s:%(levelname)s:%(module)s.%(funcName)s.%(
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 
 # Insert your own account's SID and auth_token from Twilio's account page
-twilio_account_sid = "AC864fe6f7dde181fd1fa4b0eb074fabee"
-twilio_auth_token = "5db9acca406929951e0d10e0fdc3f7f5"
+twilio_account_sid = "FILLTHISIN"
+twilio_auth_token = "FILLTHISIN"
 # The phone number you purchased from Twilio
-sTwilioNumber = "+18063294684"
+sTwilioNumber = "FILLTHISIN"
 
 iStatusEnabled = 1
 iAuthorizedUser_Count = 0
@@ -67,17 +68,15 @@ admindict = {} # admin phone numbers, able to execute ALL commands
 authdict = {} # authorized phone numbers, that can execute most commands
 
 # Connect to local MySQL database
-con = mdb.connect(host="localhost", user="alfred", passwd="alfredpassword", db="SnarfButler")
-dictcon = mdb.connect(host="localhost", user="alfred", passwd="alfredpassword", db="SnarfButler", cursorclass=MySQLdb.cursors.DictCursor)
+con = mdb.connect(host="localhost", user="smsbutler", passwd="smsbutlerpassword", db="SMSButler")
+dictcon = mdb.connect(host="localhost", user="smsbutler", passwd="smsbutlerpassword", db="SMSButler", cursorclass=MySQLdb.cursors.DictCursor)
 # Twilio client which will be fetching messages from their server
 TwilioClient = TwilioRestClient(twilio_account_sid, twilio_auth_token)
 
 # Various variables for mac addresses and such here
 storedMacs = {
-"wyn": "BC:3B:AF:20:9D:C7",
-"sheryl": "53:95:70:3E:05",
-"adrian": "C8:6F:1D:D1:4E:20",
-"adi": "C8:6F:1D:D1:4E:20"
+"jenny": "00:FF:00:FF:00:FF",
+"johnny fever": "FF:00:FF:00:FF:00"
 }
 
 # Usage dictionary
@@ -143,10 +142,10 @@ def CheckUptime():
 
 def WifiClients():
   try:
-    with open('/usr/share/wynscripts/ddwrtauth', 'r') as f:
+    with open('/usr/share/smsbutler/ddwrtauth', 'r') as f:
       wrtuser = f.readline().rstrip()
       wrtpw = f.readline().rstrip()
-      ddwrturl = "http://"+wrtuser+":"+wrtpw+"@10.1.1.1:81/Status_Wireless.asp"
+      ddwrturl = "http://"+wrtuser+":"+wrtpw+"@192.168.1.1/Status_Wireless.asp"
     return subprocess.check_output(["curl", "-s", ddwrturl])
   except:
     log.exception('Error inside function WifiClients')
@@ -162,19 +161,6 @@ def RunStalker(mac, who, name):
   except:
     log.exception('Error inside function RunStalker')
 
-def VoiceCall(passednum,passedname="you"):
-# Make the call
-  callthis = "+1"+passednum
-  mytwiml = "http://twimlets.com/echo?Twiml=%3CResponse%3E%3CSay%3E,,,HEY,%20"+passedname+"%20,Um...%20,nevermind.%20BYE.%3C%2FSay%3E%3C%2FResponse%3E&"
-  try:
-    call = TwilioClient.calls.create(to=callthis,  # Any phone number
-                           from_=sTwilioNumber, # Must be a valid Twilio number
-                           #url="http://twimlets.com/echo?Twiml=%3CResponse%3E%3CSay%3E...HEY!%20%20Um...%20nevermind.%20BYE.%3C%2FSay%3E%3C%2FResponse%3E&")	
-			   url=mytwiml)
-			       
-  except:
-    log.exception('Error inside function VoiceCall')
-    
 try:
   # Store admin and authorized phone numbers in a dictionary, so we don't waste SQL resources repeatedly querying tables
   with closing(dictcon.cursor()) as auth_cursor:
@@ -205,6 +191,83 @@ except:
     log.exception('Error while loading service, bailing!')
     if con: con.close()
     exit(2)
+
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+#                     TiVo Functions
+#
+#
+# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
+
+thingstosend = {"channelup": "IRCODE CHANNELUP", "channeldown": "IRCODE CHANNELDOWN", "pause": "IRCODE PAUSE", "play": "IRCODE PLAY"}
+tivoip = { "livingroom": "FILLTHISIN", "bedroom": "FILLTHISIN" }
+telnetoutput = ""
+response = ""
+
+def telnetSend(tivoaddr,tivocommand):   #connect to tivo, issue command, disconnect
+  try:
+    tivosock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #setup the socket
+    tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tivosock.connect((tivoaddr, 31339)) #open the socket
+    response = tivosock.recv(1096)
+    log.debug("Tivo initial response: {0}".format(response))
+    tivosock.sendall(tivocommand+"\r\n") #send the command
+    response = tivosock.recv(1096)
+    log.debug("Tivo post-send response: {0}".format(response))
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()   #close the socket connection
+    if re.search(r'\bCH_STATUS (\d+) (\w+)', response):
+      matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
+      tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    else:
+      tivoreply = "..."
+    return tivoreply
+  except:
+    log.exception("Error in telnetSend function")
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()
+
+def telnetGet(tivoaddr,tivocommand):   #connect to tivo, get data, disconnect
+  try:
+    tivosock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #setup the socket
+    tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    tivosock.connect((tivoaddr, 31339)) #open the socket
+    log.debug("telnetGet beginning")
+    while True: #scan the connection for data
+      response = tivosock.recv(4096)
+      p = "CH_STATUS"
+      if re.search(r'\bCH_STATUS (\d+) (\w+)', response): #search the data for p
+        break
+      else:
+        log.warn("telnetget rcvd an odd response")
+	break
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()   #close the socket connection
+    matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
+    if matchObj.group(1):
+      tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    else:
+      tivoreply = "BAD RESPONSE"
+    log.debug("telnetGet ran")
+    return tivoreply
+  except:
+    log.exception("Error in telnetGet function")
+    tivosock.shutdown(socket.SHUT_RDWR)
+    tivosock.close()
+
+def tivoFunction(tivoaddr,command,options=""):  #connect to tivo and perform command
+  tivocommand = command+options
+  if re.search(r'\b(\w+\W*) (\d+)', tivocommand):
+    if "view" in tivocommand:
+      commandtosend = "SETCH "+options
+      return telnetSend(tivoaddr,commandtosend)
+  elif tivocommand in thingstosend:
+    return telnetSend(tivoaddr,thingstosend[tivocommand])
+  elif tivocommand == "current channel":
+    log.info("Tivo current channel elif running")
+    return "Current channel is {0}".format(telnetGet(tivoaddr,tivocommand))
+  else:
+    return "Unrecognized command {0}".format(tivocommand)
+    log.info("User attempted to send unrecognized TiVo command: {0}".format(tivocommand))
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                       MAIN LOOP
@@ -350,6 +413,13 @@ while (True):
 	      except:
 	        ReplySMS("I'm not sure who you're looking for...")
 		
+            elif re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)(\s.*)?$', strippedsms):
+              matchObj = re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)\s*(\w*\d*)$', strippedsms)
+              if matchObj.group(3):
+                ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2),matchObj.group(3))))
+              else:
+                ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2))))
+	    
 	    elif sSMSSender not in admindict:
 	      ReplySMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
 	    
@@ -381,18 +451,6 @@ while (True):
                 else:
                   log.info('SERVICE DISABLED!  Status requested from {0}, replied'.format(contactname))
                   ReplySMS("{0}, status is SERVICE DISABLED: {1}".format(contactname,sLastCommand))
-
-              elif re.search(r'prank call ', strippedsms):
-	        matchObj = re.search(r'\bprank call ?(\w+)? ?(\d{10})', strippedsms)
- 		if iStatusEnabled == 1:
-                  log.info('Received PRANK command from {0}.'.format(contactname))
-                  if matchObj.group(1):
-		    VoiceCall(matchObj.group(2), matchObj.group(1))
-		    ReplySMS("{0}, I am prank calling {1} at {2}.".format(contactname,matchObj.group(1),matchObj.group(2)))
-		  else:
-		    VoiceCall(matchObj.group(2))
-	            ReplySMS("{0}, I am prank calling {1}.".format(contactname,matchObj.group(2)))
-		  sLastCommand = "PRANK command issued by {0} on {1}".format(contactname, time.strftime("%x %X"))
 
               elif re.search(r'send a text to ', strippedsms):
 	        matchObj = re.search(r'\bsend a text to ?(\w+)? ?(\d{10}) ?(.*)', strippedsms)
