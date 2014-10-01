@@ -30,7 +30,6 @@ import subprocess #for shell scripts and commands
 import re #regex used throughout
 import urllib #for raspberry pi webiopi rest access
 import urllib2 #for raspberry pi webiopi rest access
-import socket #for tivo integration
 from httplib import ResponseNotReady #attempt to handle exception cases
 from httplib2 import ServerNotFoundError
 
@@ -193,83 +192,6 @@ except:
     exit(2)
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-#                     TiVo Functions
-#
-#
-# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
-
-thingstosend = {"channelup": "IRCODE CHANNELUP", "channeldown": "IRCODE CHANNELDOWN", "pause": "IRCODE PAUSE", "play": "IRCODE PLAY"}
-tivoip = { "livingroom": "FILLTHISIN", "bedroom": "FILLTHISIN" }
-telnetoutput = ""
-response = ""
-
-def telnetSend(tivoaddr,tivocommand):   #connect to tivo, issue command, disconnect
-  try:
-    tivosock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #setup the socket
-    tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    tivosock.connect((tivoaddr, 31339)) #open the socket
-    response = tivosock.recv(1096)
-    log.debug("Tivo initial response: {0}".format(response))
-    tivosock.sendall(tivocommand+"\r\n") #send the command
-    response = tivosock.recv(1096)
-    log.debug("Tivo post-send response: {0}".format(response))
-    tivosock.shutdown(socket.SHUT_RDWR)
-    tivosock.close()   #close the socket connection
-    if re.search(r'\bCH_STATUS (\d+) (\w+)', response):
-      matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
-      tivoreply = matchObj.group(1)+" "+matchObj.group(2)
-    else:
-      tivoreply = "..."
-    return tivoreply
-  except:
-    log.exception("Error in telnetSend function")
-    tivosock.shutdown(socket.SHUT_RDWR)
-    tivosock.close()
-
-def telnetGet(tivoaddr,tivocommand):   #connect to tivo, get data, disconnect
-  try:
-    tivosock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) #setup the socket
-    tivosock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    tivosock.connect((tivoaddr, 31339)) #open the socket
-    log.debug("telnetGet beginning")
-    while True: #scan the connection for data
-      response = tivosock.recv(4096)
-      p = "CH_STATUS"
-      if re.search(r'\bCH_STATUS (\d+) (\w+)', response): #search the data for p
-        break
-      else:
-        log.warn("telnetget rcvd an odd response")
-	break
-    tivosock.shutdown(socket.SHUT_RDWR)
-    tivosock.close()   #close the socket connection
-    matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
-    if matchObj.group(1):
-      tivoreply = matchObj.group(1)+" "+matchObj.group(2)
-    else:
-      tivoreply = "BAD RESPONSE"
-    log.debug("telnetGet ran")
-    return tivoreply
-  except:
-    log.exception("Error in telnetGet function")
-    tivosock.shutdown(socket.SHUT_RDWR)
-    tivosock.close()
-
-def tivoFunction(tivoaddr,command,options=""):  #connect to tivo and perform command
-  tivocommand = command+options
-  if re.search(r'\b(\w+\W*) (\d+)', tivocommand):
-    if "view" in tivocommand:
-      commandtosend = "SETCH "+options
-      return telnetSend(tivoaddr,commandtosend)
-  elif tivocommand in thingstosend:
-    return telnetSend(tivoaddr,thingstosend[tivocommand])
-  elif tivocommand == "current channel":
-    log.info("Tivo current channel elif running")
-    return "Current channel is {0}".format(telnetGet(tivoaddr,tivocommand))
-  else:
-    return "Unrecognized command {0}".format(tivocommand)
-    log.info("User attempted to send unrecognized TiVo command: {0}".format(tivocommand))
-
-# =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                       MAIN LOOP
 #
 #         Continuously scan Twilio's incoming SMS list
@@ -413,13 +335,6 @@ while (True):
 	      except:
 	        ReplySMS("I'm not sure who you're looking for...")
 		
-            elif re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)(\s.*)?$', strippedsms):
-              matchObj = re.search(r'\btell the ?(\w+) ?tivo to (\w+\W*)\s*(\w*\d*)$', strippedsms)
-              if matchObj.group(3):
-                ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2),matchObj.group(3))))
-              else:
-                ReplySMS("The tivo replies: {0}".format(tivoFunction(tivoip[matchObj.group(1)],matchObj.group(2))))
-	    
 	    elif sSMSSender not in admindict:
 	      ReplySMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
 	    
