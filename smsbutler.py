@@ -31,7 +31,8 @@ import re #regex used throughout
 import urllib #for raspberry pi webiopi rest access
 import urllib2 #for raspberry pi webiopi rest access
 import socket #for tivo integration
-from httplib import ResponseNotReady #attempt to handle this exception case
+from httplib import ResponseNotReady #attempt to handle exception cases
+from httplib2 import ServerNotFoundError
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                      LOGGING
@@ -236,10 +237,16 @@ def telnetGet(tivoaddr,tivocommand):   #connect to tivo, get data, disconnect
       p = "CH_STATUS"
       if re.search(r'\bCH_STATUS (\d+) (\w+)', response): #search the data for p
         break
+      else:
+        log.warn("telnetget rcvd an odd response")
+	break
     tivosock.shutdown(socket.SHUT_RDWR)
     tivosock.close()   #close the socket connection
     matchObj = re.search(r'\bCH_STATUS (\d+) (\w+)', response)
-    tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    if matchObj.group(1):
+      tivoreply = matchObj.group(1)+" "+matchObj.group(2)
+    else:
+      tivoreply = "BAD RESPONSE"
     log.debug("telnetGet ran")
     return tivoreply
   except:
@@ -333,7 +340,7 @@ while (True):
 
             #inserting elif for Usage command here with regex...
 	    elif re.search(r'\busage (\w+)+', strippedsms):
-	      matchObj = re.search(r'\busage (\w+)+', strippedsms)
+	      matchObj = re.search(r'\busage ((?:\w+\s*)*)', strippedsms)
 	      # use a dictionary for the usage definitions
 	      if matchObj.group(1):
 	        if matchObj.group(1) in usagedict:
@@ -470,6 +477,10 @@ while (True):
   
   except ResponseNotReady:
     log.warn("httplib threw a ResponseNotReady, previous command may have failed") #log httplib exception
+    messages = TwilioClient.messages.list(date_sent=datetime.datetime.utcnow()) #retry retrieving message list
+  
+  except ServerNotFoundError:
+    log.warn("httplib threw a ServerNotFound, previous command may have failed") #log httplib exception
     messages = TwilioClient.messages.list(date_sent=datetime.datetime.utcnow()) #retry retrieving message list
   
   except Exception as e:
