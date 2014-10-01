@@ -103,12 +103,14 @@ usagedict = {
 def ReplySMS(sMsg):
   try:
     sms = TwilioClient.sms.messages.create(body="{0}".format(sMsg),to="{0}".format(sSMSSender),from_="{0}".format(sTwilioNumber))
+    log.debug('ReplySMS ran')
   except:
     log.exception('Error inside function ReplySMS')
 
 def SendSMS(sMsg, sRecip):
   try:
     sms = TwilioClient.sms.messages.create(body="{0}".format(sMsg),to="{0}".format(sRecip),from_="{0}".format(sTwilioNumber))
+    log.debug('SendSMS ran')
   except:
     log.exception('Error inside function SendSMS')
 
@@ -120,6 +122,7 @@ def ToggleLight(value):
     data = urllib.urlencode('')
     req = urllib2.Request(url, data)
     response = urllib2.urlopen(req)  
+    log.debug('ToggleLight ran')
   except:
     log.exception('Error inside function ToggleLight')
 
@@ -131,12 +134,14 @@ def LightStatus():
       return " The light is on."
     else:
       return " The light is off."
+    log.debug('LightStatus ran')
   except:
     log.exception('Error inside function LightStatus')
 
 def CheckUptime():
   try:
     return subprocess.check_output(["uptime"])
+    log.debug('CheckUptime ran')
   except:
     log.exception('Error inside function CheckUptime')
 
@@ -147,6 +152,7 @@ def WifiClients():
       wrtpw = f.readline().rstrip()
       ddwrturl = "http://"+wrtuser+":"+wrtpw+"@192.168.1.1/Status_Wireless.asp"
     return subprocess.check_output(["curl", "-s", ddwrturl])
+    log.debug('WifiClients ran')
   except:
     log.exception('Error inside function WifiClients')
 
@@ -158,6 +164,7 @@ def RunStalker(mac, who, name):
       while mac not in WifiClients():
         time.sleep(120)
       ReplySMS("{0} has returned home as of {1}.".format(name.title(), time.strftime("%x %X")))
+    log.debug('RunStalker ran')
   except:
     log.exception('Error inside function RunStalker')
 
@@ -263,7 +270,7 @@ def tivoFunction(tivoaddr,command,options=""):  #connect to tivo and perform com
   elif tivocommand in thingstosend:
     return telnetSend(tivoaddr,thingstosend[tivocommand])
   elif tivocommand == "current channel":
-    log.info("Tivo current channel elif running")
+    log.debug("Tivo current channel elif running")
     return "Current channel is {0}".format(telnetGet(tivoaddr,tivocommand))
   else:
     return "Unrecognized command {0}".format(tivocommand)
