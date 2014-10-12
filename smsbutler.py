@@ -31,7 +31,7 @@ import re #regex used throughout
 import urllib #for raspberry pi webiopi rest access
 import urllib2 #for raspberry pi webiopi rest access
 from httplib import ResponseNotReady #attempt to handle exception cases
-from httplib2 import ServerNotFoundError
+from httplib2 import ServerNotFoundError, HttpLib2Error
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                      LOGGING
@@ -50,6 +50,7 @@ twilio_account_sid = "FILLTHISIN"
 twilio_auth_token = "FILLTHISIN"
 # The phone number you purchased from Twilio
 sTwilioNumber = "FILLTHISIN"
+ownerphone = "FILLTHISIN"
 
 iStatusEnabled = 1
 iAuthorizedUser_Count = 0
@@ -383,22 +384,19 @@ while (True):
                 ReplySMS("I'm sorry, I didn't quite catch that, {0}.".format(contactname))
     
           else: # This phone number is not authorized.  Report possible intrusion to home owner
-            log.critical('Unauthorized user tried to access system: {0}'.format(sSMSSender))
+            log.warn('Unauthorized user tried to access system: {0}'.format(sSMSSender))
 	    sLastCommand = "Unauthorized attempt by {0} on {1}".format(p.from_, time.strftime("%x %X"))
 
   except KeyboardInterrupt:  
     if con: con.close()
     exit(4)
   
-  except ResponseNotReady:
-    log.warn("httplib threw a ResponseNotReady, previous command may have failed") #log httplib exception
+  except (ResponseNotReady, ServerNotFoundError, HttpLib2Error):
+    log.error("httplib or httplib2 threw an error, previous command may have failed", exc_info=True) #log httplib exception
     messages = TwilioClient.messages.list(date_sent=datetime.datetime.utcnow()) #retry retrieving message list
-  
-  except ServerNotFoundError:
-    log.warn("httplib threw a ServerNotFound, previous command may have failed") #log httplib exception
-    messages = TwilioClient.messages.list(date_sent=datetime.datetime.utcnow()) #retry retrieving message list
-  
-  except Exception as e:
+
+  except Exception:
     log.critical("Something broke the SMS Butler!", exc_info=True)
+    SendSMS("SMSButler has crashed.", ownerphone)
     if con: con.close()
     exit(1)
