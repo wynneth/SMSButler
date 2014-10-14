@@ -52,6 +52,7 @@ twilio_account_sid = "FILLTHISIN"
 twilio_auth_token = "FILLTHISIN"
 # The phone number you purchased from Twilio
 sTwilioNumber = "FILLTHISIN"
+ownerphone = "FILLTHISIN"
 
 iStatusEnabled = 1
 iAuthorizedUser_Count = 0
