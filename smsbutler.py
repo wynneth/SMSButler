@@ -32,6 +32,7 @@ import urllib #for raspberry pi webiopi rest access
 import urllib2 #for raspberry pi webiopi rest access
 from httplib import ResponseNotReady #attempt to handle exception cases
 from httplib2 import ServerNotFoundError, HttpLib2Error
+from ssl import SSLError
 
 # =-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=
 #                      LOGGING
@@ -222,7 +223,7 @@ while (True):
               insert_sid_cursor = insert_sid_cursor.execute("insert into Butler(sSid,dDate) values('{0}',UNIX_TIMESTAMP('{1}'))".format(p.sid,fixeddate))
               con.commit()
             with closing(con.cursor()) as delete_sid_cursor:
-	      delete_sid_cursor = delete_sid_cursor.execute("delete from Butler where FROM_UNIXTIME(dDate) < {:%Y-%m-%d}".format(datetime.datetime.utcnow() - datetime.timedelta(days=1)))
+	      delete_sid_cursor = delete_sid_cursor.execute("delete from Butler where FROM_UNIXTIME(dDate, '%Y-%m-%d') < '{:%Y-%m-%d}'".format(datetime.datetime.utcnow() - datetime.timedelta(days=1)))
 	      log.info("Attempting to delete old records")
 	      con.commit()
 	  except (AttributeError, MySQLdb.OperationalError):
@@ -391,10 +392,10 @@ while (True):
     if con: con.close()
     exit(4)
   
-  except (ResponseNotReady, ServerNotFoundError, HttpLib2Error):
+  except (ResponseNotReady, ServerNotFoundError, HttpLib2Error, SSLError):
     log.error("httplib or httplib2 threw an error, previous command may have failed", exc_info=True) #log httplib exception
     messages = TwilioClient.messages.list(date_sent=datetime.datetime.utcnow()) #retry retrieving message list
-
+  
   except Exception:
     log.critical("Something broke the SMS Butler!", exc_info=True)
     SendSMS("SMSButler has crashed.", ownerphone)
